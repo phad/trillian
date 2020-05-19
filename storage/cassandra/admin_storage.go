@@ -2,29 +2,32 @@ package cassandra
 
 import (
 	"context"
-  "errors"
+	"errors"
 
 	"github.com/google/trillian/storage"
+	"github.com/monzo/gocassa"
 )
 
-
 // NewAdminStorage returns a storage.AdminStorage implementation
-func NewAdminStorage() storage.AdminStorage {
-	return &cassAdminStorage{}
+func NewAdminStorage(ks gocassa.KeySpace) storage.AdminStorage {
+	return &cassAdminStorage{ks: ks}
 }
 
 type cassAdminStorage struct {
-  // TODO(phad): add cass DB connection.
+	ks gocassa.KeySpace
 }
 
 func (s *cassAdminStorage) ReadWriteTransaction(context.Context, storage.AdminTXFunc) error {
-  return errors.New("adminStorage.ReadWriteTransaction: not implemented")
+	return errors.New("cassAdminStorage.ReadWriteTransaction: not implemented")
 }
 
 func (s *cassAdminStorage) CheckDatabaseAccessible(context.Context) error {
-  return errors.New("adminStorage.CheckDatabaseAccessible: not implemented")
+	if s.ks.Name() == "" {
+		return errors.New("cassAdminStorage.CheckDatabaseAccessible: Cassandra not ready")
+	}
+	return nil
 }
 
 func (s *cassAdminStorage) Snapshot(context.Context) (storage.ReadOnlyAdminTX, error) {
-  return nil, errors.New("adminStorage.Snapshot: not implemented")
+	return nil, errors.New("cassAdminStorage.Snapshot: not implemented")
 }
