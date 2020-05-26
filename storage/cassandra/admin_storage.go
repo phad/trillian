@@ -83,67 +83,67 @@ func (t *cassAdminTX) Close() error {
   return errors.New("cassAdminTX.Close: not implemented")
 }
 
-func cassTreeToTrillianTree(cassTree *tree) (*trillian.Tree, error) {
-	trilTree := &trillian.Tree{
-		TreeId: cassTree.TreeID,
-		Deleted: cassTree.Deleted,
-		DisplayName: cassTree.DisplayName,
-		Description: cassTree.Description,
-		MaxRootDuration: ptypes.DurationProto(time.Duration(cassTree.MaxRootDurationMillis * int64(time.Millisecond))),
+func cassTreeToTrillianTree(cTree *cassTree) (*trillian.Tree, error) {
+	trTree := &trillian.Tree{
+		TreeId: cTree.TreeID,
+		Deleted: cTree.Deleted,
+		DisplayName: cTree.DisplayName,
+		Description: cTree.Description,
+		MaxRootDuration: ptypes.DurationProto(time.Duration(cTree.MaxRootDurationMillis * int64(time.Millisecond))),
 	}
 	var err error
-	trilTree.CreateTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cassTree.CreateTimeMillis))
+	trTree.CreateTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cTree.CreateTimeMillis))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tree.CreateTime: %v", err)
 	}
-	trilTree.UpdateTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cassTree.UpdateTimeMillis))
+	trTree.UpdateTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cTree.UpdateTimeMillis))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tree.UpdateTime: %v", err)
 	}
-	trilTree.DeleteTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cassTree.DeleteTimeMillis))
+	trTree.DeleteTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cTree.DeleteTimeMillis))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tree.DeleteTime: %v", err)
 	}
 	// Duped from sql.go  ...  convert all things!
-	if ts, ok := trillian.TreeState_value[cassTree.TreeState]; ok {
-		trilTree.TreeState = trillian.TreeState(ts)
+	if ts, ok := trillian.TreeState_value[cTree.TreeState]; ok {
+		trTree.TreeState = trillian.TreeState(ts)
 	} else {
-		return nil, fmt.Errorf("unknown TreeState: %v", cassTree.TreeState)
+		return nil, fmt.Errorf("unknown TreeState: %v", cTree.TreeState)
 	}
-	if tt, ok := trillian.TreeType_value[cassTree.TreeType]; ok {
-		trilTree.TreeType = trillian.TreeType(tt)
+	if tt, ok := trillian.TreeType_value[cTree.TreeType]; ok {
+		trTree.TreeType = trillian.TreeType(tt)
 	} else {
-		return nil, fmt.Errorf("unknown TreeType: %v", cassTree.TreeType)
+		return nil, fmt.Errorf("unknown TreeType: %v", cTree.TreeType)
 	}
-	if hs, ok := trillian.HashStrategy_value[cassTree.HashStrategy]; ok {
-		trilTree.HashStrategy = trillian.HashStrategy(hs)
+	if hs, ok := trillian.HashStrategy_value[cTree.HashStrategy]; ok {
+		trTree.HashStrategy = trillian.HashStrategy(hs)
 	} else {
-		return nil, fmt.Errorf("unknown HashStrategy: %v", cassTree.HashStrategy)
+		return nil, fmt.Errorf("unknown HashStrategy: %v", cTree.HashStrategy)
 	}
-	if ha, ok := spb.DigitallySigned_HashAlgorithm_value[cassTree.HashAlgorithm]; ok {
-		trilTree.HashAlgorithm = spb.DigitallySigned_HashAlgorithm(ha)
+	if ha, ok := spb.DigitallySigned_HashAlgorithm_value[cTree.HashAlgorithm]; ok {
+		trTree.HashAlgorithm = spb.DigitallySigned_HashAlgorithm(ha)
 	} else {
-		return nil, fmt.Errorf("unknown HashAlgorithm: %v", cassTree.HashAlgorithm)
+		return nil, fmt.Errorf("unknown HashAlgorithm: %v", cTree.HashAlgorithm)
 	}
-	if sa, ok := spb.DigitallySigned_SignatureAlgorithm_value[cassTree.SignatureAlgorithm]; ok {
-		trilTree.SignatureAlgorithm = spb.DigitallySigned_SignatureAlgorithm(sa)
+	if sa, ok := spb.DigitallySigned_SignatureAlgorithm_value[cTree.SignatureAlgorithm]; ok {
+		trTree.SignatureAlgorithm = spb.DigitallySigned_SignatureAlgorithm(sa)
 	} else {
-		return nil, fmt.Errorf("unknown SignatureAlgorithm: %v", cassTree.SignatureAlgorithm)
+		return nil, fmt.Errorf("unknown SignatureAlgorithm: %v", cTree.SignatureAlgorithm)
 	}
-	trilTree.PrivateKey = &any.Any{}
-	if err := proto.Unmarshal(cassTree.PrivateKey, trilTree.PrivateKey); err != nil {
+	trTree.PrivateKey = &any.Any{}
+	if err := proto.Unmarshal(cTree.PrivateKey, trTree.PrivateKey); err != nil {
 		return nil, fmt.Errorf("could not unmarshal PrivateKey: %v", err)
 	}
-	trilTree.PublicKey = &kpb.PublicKey{Der: cassTree.PublicKey}
-	return trilTree, nil
+	trTree.PublicKey = &kpb.PublicKey{Der: cTree.PublicKey}
+	return trTree, nil
 }
 
 func (t *cassAdminTX) GetTree(ctx context.Context, treeID int64) (*trillian.Tree, error) {
 	glog.Infof("Admin.GetTree: treeID=%d", treeID)
-	treesTable := t.ks.Table("trees", &tree{}, gocassa.Keys{
+	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
   }).WithOptions(gocassa.Options{TableName: "trees"})
-	treeResult := &tree{}
+	treeResult := &cassTree{}
 	err := treesTable.Where(gocassa.Eq("tree_id", treeID)).ReadOne(treeResult).Run()
 	if err != nil {
 		return nil, err
@@ -152,17 +152,17 @@ func (t *cassAdminTX) GetTree(ctx context.Context, treeID int64) (*trillian.Tree
 	return cassTreeToTrillianTree(treeResult)
 }
 
-type group struct {
+type cassGroup struct {
   ID   string `cql:"group_id"`
 	Name string `cql:"group_name"`
 }
 
-type treeGroup struct {
+type cassTreeGroup struct {
 	TreeID int64 `cql:"tree_id"`
 	GroupID string `cql:"group_id"`
 }
 
-type tree struct {
+type cassTree struct {
   TreeID int64 `cql:"tree_id"`
 	CreateTimeMillis int64 `cql:"create_time_millis"`
 	UpdateTimeMillis int64 `cql:"update_time_millis"`
@@ -189,11 +189,11 @@ func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*tr
 		return nil, err
 	}
 	result := make([]*trillian.Tree, len(treeIDs))
-	treesTable := t.ks.Table("trees", &tree{}, gocassa.Keys{
+	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
   })
 	treesTable = treesTable.WithOptions(gocassa.Options{TableName: "trees"})
-	treeResult := tree{}
+	treeResult := cassTree{}
 	for i, tID := range treeIDs {
 		if err := treesTable.Where(gocassa.Eq("tree_id", tID)).ReadOne(&treeResult).Run(); err != nil {
 			return nil, err
@@ -209,11 +209,11 @@ func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*tr
 }
 
 func (t *cassAdminTX) defaultGroupID(ctx context.Context) (string, error) {
-	groupsByNameTable := t.ks.Table("groups_by_name", &group{}, gocassa.Keys{
+	groupsByNameTable := t.ks.Table("groups_by_name", &cassGroup{}, gocassa.Keys{
 		PartitionKeys: []string{"group_name"},
   })
 	groupsByNameTable = groupsByNameTable.WithOptions(gocassa.Options{TableName: "groups_by_name"})
-	groupResult := group{}
+	groupResult := cassGroup{}
 	if err := groupsByNameTable.Where(gocassa.Eq("group_name", "_default")).ReadOne(&groupResult).Run(); err != nil {
 		return "", err
 	}
@@ -228,9 +228,9 @@ func (t *cassAdminTX) ListTreeIDs(ctx context.Context, includeDeleted bool) ([]i
 		return nil, err
 	}
 
-  treesByGroupIDTable := t.ks.MultimapTable("trees_by_group_id", "group_id", "tree_id", &treeGroup{})
+  treesByGroupIDTable := t.ks.MultimapTable("trees_by_group_id", "group_id", "tree_id", &cassTreeGroup{})
 	treesByGroupIDTable = treesByGroupIDTable.WithOptions(gocassa.Options{TableName: "trees_by_group_id"})
-	treeGroupsResult := []treeGroup{}
+	treeGroupsResult := []cassTreeGroup{}
 	if err = treesByGroupIDTable.List(defGroupID, nil, 0, &treeGroupsResult).Run(); err != nil {
     return nil, err
   }
@@ -306,17 +306,17 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 		return nil, err
 	}
 
-	treesByGroupIDTable := t.ks.MultimapTable("trees_by_group_id", "group_id", "tree_id", &treeGroup{})
+	treesByGroupIDTable := t.ks.MultimapTable("trees_by_group_id", "group_id", "tree_id", &cassTreeGroup{})
 	treesByGroupIDTable = treesByGroupIDTable.WithOptions(gocassa.Options{TableName: "trees_by_group_id"})
-	treesTable := t.ks.Table("trees", &tree{}, gocassa.Keys{
+	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
   })
 	treesTable = treesTable.WithOptions(gocassa.Options{TableName: "trees"})
 
-	if err := treesByGroupIDTable.Set(treeGroup{
+	if err := treesByGroupIDTable.Set(cassTreeGroup{
 		TreeID:  id,
 		GroupID: defGroupID,
-	}).Add(treesTable.Set(tree{
+	}).Add(treesTable.Set(cassTree{
 		TreeID:      id,
 		CreateTimeMillis: nowMillis,
 		UpdateTimeMillis: nowMillis,
