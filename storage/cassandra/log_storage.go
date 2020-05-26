@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/google/trillian"
 	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/storage"
@@ -38,21 +39,26 @@ func (m *cassLogStorage) CheckDatabaseAccessible(context.Context) error {
 }
 
 func (m *cassLogStorage) Snapshot(context.Context) (storage.ReadOnlyLogTX, error) {
+	glog.Infof("cassLogStorage.Snapshot")
 	return nil, errors.New("cassLogStorage.Snapshot: not implemented")
 }
 
-func (m *cassLogStorage) ReadWriteTransaction(context.Context, *trillian.Tree, storage.LogTXFunc) error {
+func (m *cassLogStorage) ReadWriteTransaction(_ context.Context, tree *trillian.Tree, _ storage.LogTXFunc) error {
+	glog.Infof("cassLogStorage.ReadWriteTransaction: tree=%v")
 	return errors.New("cassLogStorage.ReadWriteTransaction: not implemented")
 }
 
-func (m *cassLogStorage) AddSequencedLeaves(context.Context, *trillian.Tree, []*trillian.LogLeaf, time.Time) ([]*trillian.QueuedLogLeaf, error) {
+func (m *cassLogStorage) AddSequencedLeaves(_ context.Context, tree *trillian.Tree, leaves []*trillian.LogLeaf, _ time.Time) ([]*trillian.QueuedLogLeaf, error) {
+	glog.Infof("cassLogStorage.AddSequencedLeaves: %d leaves for tree=%v", len(leaves), tree)
 	return nil, errors.New("cassLogStorage.AddSequencedLeaves: not implemented")
 }
 
 func (m *cassLogStorage) SnapshotForTree(ctx context.Context, tree *trillian.Tree) (storage.ReadOnlyLogTreeTX, error) {
+	glog.Infof("cassLogStorage.SnapshotForTree: tree=%v", tree)
 	return nil, errors.New("cassLogStorage.SnapshotForTree: not implemented")
 }
 
-func (m *cassLogStorage) QueueLeaves(context.Context, *trillian.Tree, []*trillian.LogLeaf, time.Time) ([]*trillian.QueuedLogLeaf, error) {
+func (m *cassLogStorage) QueueLeaves(_ context.Context, tree *trillian.Tree, leaves []*trillian.LogLeaf, _ time.Time) ([]*trillian.QueuedLogLeaf, error) {
+	glog.Infof("cassLogStorage.QueueLeaves: %d leaves for tree %v", len(leaves), tree)
 	return nil, errors.New("cassLogStorage.QueueLeaves: not implemented")
 }
