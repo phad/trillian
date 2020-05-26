@@ -9,7 +9,9 @@ import (
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
   "github.com/google/trillian"
+	kpb "github.com/google/trillian/crypto/keyspb"
 	spb "github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/storage"
 	"github.com/monzo/gocassa"
@@ -128,6 +130,11 @@ func cassTreeToTrillianTree(cassTree *tree) (*trillian.Tree, error) {
 	} else {
 		return nil, fmt.Errorf("unknown SignatureAlgorithm: %v", cassTree.SignatureAlgorithm)
 	}
+	trilTree.PrivateKey = &any.Any{}
+	if err := proto.Unmarshal(cassTree.PrivateKey, trilTree.PrivateKey); err != nil {
+		return nil, fmt.Errorf("could not unmarshal PrivateKey: %v", err)
+	}
+	trilTree.PublicKey = &kpb.PublicKey{Der: cassTree.PublicKey}
 	return trilTree, nil
 }
 
@@ -171,6 +178,8 @@ type tree struct {
 	// TODO(phad): Should be `cql:"max_root_duration_millis"`.  GetTree fails with
 	// ```can not unmarshal duration into *int64``` - possibly down in gocql?
 	MaxRootDurationMillis int64 `cql:"-"`
+	PrivateKey []byte `cql:"private_key"`
+	PublicKey []byte `cql:"public_key"`
 }
 
 func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*trillian.Tree, error) {
@@ -287,6 +296,10 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 	if err != nil {
 		return nil, fmt.Errorf("could not parse MaxRootDuration: %v", err)
 	}
+	privateKey, err := proto.Marshal(newTree.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal PrivateKey: %v", err)
+	}
 
 	defGroupID, err := t.defaultGroupID(ctx)
 	if err != nil {
@@ -316,6 +329,8 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 		HashAlgorithm: newTree.HashAlgorithm.String(),
 		SignatureAlgorithm: newTree.SignatureAlgorithm.String(),
 		MaxRootDurationMillis: int64(rootDuration/time.Millisecond),
+		PrivateKey: privateKey,
+		PublicKey: newTree.PublicKey.GetDer(),
 	})).RunLoggedBatchWithContext(ctx); err != nil {
 		return nil, err
 	}
