@@ -5,11 +5,11 @@ CREATE KEYSPACE test WITH replication = {
 
 CREATE TABLE test.trees(
   tree_id                  bigint,
-  tree_state               tinyint,
-  tree_type                tinyint,
-  hash_strategy            tinyint,
-  hash_algorithm           tinyint,
-  signature_algorithm      tinyint,
+  tree_state               text,
+  tree_type                text,
+  hash_strategy            text,
+  hash_algorithm           text,
+  signature_algorithm      text,
   display_name             varchar,
   description              varchar,
   create_time_millis       timestamp,

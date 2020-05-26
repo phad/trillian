@@ -3,9 +3,14 @@ package cassandra
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/golang/glog"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes"
   "github.com/google/trillian"
+	spb "github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/storage"
 	"github.com/monzo/gocassa"
 )
@@ -76,20 +81,68 @@ func (t *cassAdminTX) Close() error {
   return errors.New("cassAdminTX.Close: not implemented")
 }
 
+func cassTreeToTrillianTree(cassTree *tree) (*trillian.Tree, error) {
+	trilTree := &trillian.Tree{
+		TreeId: cassTree.TreeID,
+		Deleted: cassTree.Deleted,
+		DisplayName: cassTree.DisplayName,
+		Description: cassTree.Description,
+		MaxRootDuration: ptypes.DurationProto(time.Duration(cassTree.MaxRootDurationMillis * int64(time.Millisecond))),
+	}
+	var err error
+	trilTree.CreateTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cassTree.CreateTimeMillis))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build tree.CreateTime: %v", err)
+	}
+	trilTree.UpdateTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cassTree.UpdateTimeMillis))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build tree.UpdateTime: %v", err)
+	}
+	trilTree.DeleteTime, err = ptypes.TimestampProto(storage.FromMillisSinceEpoch(cassTree.DeleteTimeMillis))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build tree.DeleteTime: %v", err)
+	}
+	// Duped from sql.go  ...  convert all things!
+	if ts, ok := trillian.TreeState_value[cassTree.TreeState]; ok {
+		trilTree.TreeState = trillian.TreeState(ts)
+	} else {
+		return nil, fmt.Errorf("unknown TreeState: %v", cassTree.TreeState)
+	}
+	if tt, ok := trillian.TreeType_value[cassTree.TreeType]; ok {
+		trilTree.TreeType = trillian.TreeType(tt)
+	} else {
+		return nil, fmt.Errorf("unknown TreeType: %v", cassTree.TreeType)
+	}
+	if hs, ok := trillian.HashStrategy_value[cassTree.HashStrategy]; ok {
+		trilTree.HashStrategy = trillian.HashStrategy(hs)
+	} else {
+		return nil, fmt.Errorf("unknown HashStrategy: %v", cassTree.HashStrategy)
+	}
+	if ha, ok := spb.DigitallySigned_HashAlgorithm_value[cassTree.HashAlgorithm]; ok {
+		trilTree.HashAlgorithm = spb.DigitallySigned_HashAlgorithm(ha)
+	} else {
+		return nil, fmt.Errorf("unknown HashAlgorithm: %v", cassTree.HashAlgorithm)
+	}
+	if sa, ok := spb.DigitallySigned_SignatureAlgorithm_value[cassTree.SignatureAlgorithm]; ok {
+		trilTree.SignatureAlgorithm = spb.DigitallySigned_SignatureAlgorithm(sa)
+	} else {
+		return nil, fmt.Errorf("unknown SignatureAlgorithm: %v", cassTree.SignatureAlgorithm)
+	}
+	return trilTree, nil
+}
+
 func (t *cassAdminTX) GetTree(ctx context.Context, treeID int64) (*trillian.Tree, error) {
 	glog.Infof("Admin.GetTree: treeID=%d", treeID)
 	treesTable := t.ks.Table("trees", &tree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
   }).WithOptions(gocassa.Options{TableName: "trees"})
-	treeResult := tree{}
-	if err := treesTable.Where(gocassa.Eq("tree_id", treeID)).ReadOne(&treeResult).Run(); err != nil {
+	treeResult := &tree{}
+	err := treesTable.Where(gocassa.Eq("tree_id", treeID)).ReadOne(treeResult).Run()
+	if err != nil {
 		return nil, err
 	}
 	glog.Infof("GetTree: read tree %v", treeResult)
-	return &trillian.Tree{
-		TreeId: treeID,
-		DisplayName: treeResult.DisplayName,
-	}, nil
+	return cassTreeToTrillianTree(treeResult)
 }
 
 type group struct {
@@ -104,7 +157,20 @@ type treeGroup struct {
 
 type tree struct {
   TreeID int64 `cql:"tree_id"`
+	CreateTimeMillis int64 `cql:"create_time_millis"`
+	UpdateTimeMillis int64 `cql:"update_time_millis"`
+	DeleteTimeMillis int64 `cql:"delete_time_millis"`
+	Deleted bool `cql:"deleted"`
 	DisplayName string `cql:"display_name"`
+	Description string `cql:"description"`
+	TreeState string `cql:"tree_state"`
+	TreeType string `cql:"tree_type"`
+	HashStrategy string `cql:"hash_strategy"`
+	HashAlgorithm string `cql:"hash_algorithm"`
+	SignatureAlgorithm string `cql:"signature_algorithm"`
+	// TODO(phad): Should be `cql:"max_root_duration_millis"`.  GetTree fails with
+	// ```can not unmarshal duration into *int64``` - possibly down in gocql?
+	MaxRootDurationMillis int64 `cql:"-"`
 }
 
 func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*trillian.Tree, error) {
@@ -124,10 +190,11 @@ func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*tr
 			return nil, err
 		}
 		glog.Infof("read tree %v", treeResult)
-		result[i] = &trillian.Tree{
-			TreeId: tID,
-			DisplayName: treeResult.DisplayName,
+		trilTree, err := cassTreeToTrillianTree(&treeResult)
+		if err != nil {
+			return nil, err
 		}
+		result[i] = trilTree
 	}
 	return result, nil
 }
@@ -167,6 +234,11 @@ func (t *cassAdminTX) ListTreeIDs(ctx context.Context, includeDeleted bool) ([]i
   return treeIDs, nil
 }
 
+func validateStorageSettings(trilTree *trillian.Tree) error {
+	// TODO(phad): implement me.
+	return nil
+}
+
 func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (*trillian.Tree, error) {
 //  return nil, errors.New("cassAdminTX.CreateTree: not implemented")
 	/*
@@ -184,6 +256,38 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 	> )
 	*/
 	glog.Infof("Admin.CreateTree: tree=%v", trilTree)
+
+	if err := storage.ValidateTreeForCreation(ctx, trilTree); err != nil {
+		return nil, err
+	}
+	if err := validateStorageSettings(trilTree); err != nil {
+		return nil, err
+	}
+
+	id, err := storage.NewTreeID()
+	if err != nil {
+		return nil, err
+	}
+
+	// Use the time truncated-to-millis throughout, as that's what's stored.
+	nowMillis := storage.ToMillisSinceEpoch(time.Now())
+	now := storage.FromMillisSinceEpoch(nowMillis)
+
+	newTree := proto.Clone(trilTree).(*trillian.Tree)
+	newTree.TreeId = id
+	newTree.CreateTime, err = ptypes.TimestampProto(now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build create time: %v", err)
+	}
+	newTree.UpdateTime, err = ptypes.TimestampProto(now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build update time: %v", err)
+	}
+	rootDuration, err := ptypes.Duration(newTree.MaxRootDuration)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse MaxRootDuration: %v", err)
+	}
+
 	defGroupID, err := t.defaultGroupID(ctx)
 	if err != nil {
 		return nil, err
@@ -197,15 +301,25 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 	treesTable = treesTable.WithOptions(gocassa.Options{TableName: "trees"})
 
 	if err := treesByGroupIDTable.Set(treeGroup{
-		TreeID:  12,
+		TreeID:  id,
 		GroupID: defGroupID,
 	}).Add(treesTable.Set(tree{
-		TreeID:      12,
-		DisplayName: "John",
+		TreeID:      id,
+		CreateTimeMillis: nowMillis,
+		UpdateTimeMillis: nowMillis,
+		Deleted: false,
+		DisplayName: newTree.DisplayName,
+		Description: newTree.Description,
+		TreeState: newTree.TreeState.String(),
+		TreeType: newTree.TreeType.String(),
+		HashStrategy: newTree.HashStrategy.String(),
+		HashAlgorithm: newTree.HashAlgorithm.String(),
+		SignatureAlgorithm: newTree.SignatureAlgorithm.String(),
+		MaxRootDurationMillis: int64(rootDuration/time.Millisecond),
 	})).RunLoggedBatchWithContext(ctx); err != nil {
 		return nil, err
 	}
-	return trilTree, nil
+	return newTree, nil
 }
 
 func (t *cassAdminTX) UpdateTree(ctx context.Context, treeID int64, updateFunc func(*trillian.Tree)) (*trillian.Tree, error) {
