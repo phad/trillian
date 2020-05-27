@@ -29,3 +29,12 @@ type cassTree struct {
 	PrivateKey            []byte `cql:"private_key"`
 	PublicKey             []byte `cql:"public_key"`
 }
+
+type cassTreeHead struct {
+	TreeID         int64  `cql:"tree_id"`
+	Revision       uint64 `cql:"revision"`
+	TimestampNanos uint64 `cql:"timestamp_nanos"`
+	Size           uint64 `cql:"size"`
+	RootHash       []byte `cql:"root_hash"`
+	RootSignature  []byte `cql:"root_signature"`
+}

@@ -2,7 +2,9 @@ package cassandra
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang/glog"
@@ -11,6 +13,7 @@ import (
 	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/cache"
+	"github.com/google/trillian/types"
 	"github.com/monzo/gocassa"
 )
 
@@ -46,7 +49,7 @@ func (m *cassLogStorage) CheckDatabaseAccessible(context.Context) error {
 }
 
 type cassLogTX struct {
-  ks gocassa.KeySpace
+	ks gocassa.KeySpace
 }
 
 // readOnlyLogTX implements storage.ReadOnlyLogTX
@@ -83,8 +86,12 @@ func (m *cassLogStorage) beginInternal(ctx context.Context, tree *trillian.Tree)
 		return nil, err
 	}
 
+	// TODO(phad): Read Latest SLR from DB.
+
 	ltx := &logTreeTX{
 		treeTX: ttx,
+		ks:     m.ks,
+		slr:    &trillian.SignedLogRoot{ /*TODO*/ },
 	}
 
 	// TODO: lots of stuff omitted here from postgres storage.
@@ -108,6 +115,8 @@ func (m *cassLogStorage) QueueLeaves(_ context.Context, tree *trillian.Tree, lea
 
 type logTreeTX struct {
 	treeTX
+	ks  gocassa.KeySpace
+	slr *trillian.SignedLogRoot
 }
 
 func (t *logTreeTX) ReadRevision(ctx context.Context) (int64, error) {
@@ -147,11 +156,47 @@ func (t *logTreeTX) GetLeavesByHash(ctx context.Context, leafHashes [][]byte, or
 }
 
 func (t *logTreeTX) LatestSignedLogRoot(ctx context.Context) (*trillian.SignedLogRoot, error) {
-	return nil, errors.New("cassLogStorage.logTreeTX.LatestSignedLogRoot: not implemented")
+	glog.Infof("cassandra.logTreeTX.LatestSignedLogRoot(): slr=%v", t.slr)
+	return t.slr, nil
 }
 
 func (t *logTreeTX) StoreSignedLogRoot(ctx context.Context, root *trillian.SignedLogRoot) error {
-	return errors.New("cassLogStorage.logTreeTX.StoreSignedLogRoot: not implemented")
+	glog.Infof("cassandra.logTreeTX.StoreSignedLogRoot(): root=%v", root)
+
+	var logRoot types.LogRootV1
+	if err := logRoot.UnmarshalBinary(root.LogRoot); err != nil {
+		glog.Warningf("Failed to parse log root: %x %v", root.LogRoot, err)
+		return err
+	}
+	if len(logRoot.Metadata) != 0 {
+		return fmt.Errorf("unimplemented: cassandra storage does not support LogRoot.metadata")
+	}
+	//get a json copy of the tree_head
+	data, _ := json.Marshal(logRoot)
+
+	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
+		PartitionKeys: []string{"tree_id"},
+	}).WithOptions(gocassa.Options{TableName: "trees"})
+
+	treeHeadsTable := t.ks.Table("tree_heads", &cassTreeHead{}, gocassa.Keys{
+		PartitionKeys: []string{"tree_id", "tree_revision"},
+	}).WithOptions(gocassa.Options{TableName: "tree_heads"})
+
+	if err := treesTable.Where(gocassa.Eq("tree_id", t.treeID)).Update(map[string]interface{}{
+		"current_tree_data": data,
+		"root_signature":    root.LogRootSignature,
+	}).Add(treeHeadsTable.Set(cassTreeHead{
+		TreeID:         t.treeID,         // PK
+		Revision:       logRoot.Revision, // PK
+		TimestampNanos: logRoot.TimestampNanos,
+		Size:           logRoot.TreeSize,
+		RootHash:       logRoot.RootHash,
+		RootSignature:  root.LogRootSignature,
+	})).RunLoggedBatchWithContext(ctx); err != nil {
+		glog.Warningf("Failed to store signed root: %s", err)
+		return err
+	}
+	return nil
 }
 
 func (t *logTreeTX) UpdateSequencedLeaves(ctx context.Context, leaves []*trillian.LogLeaf) error {
