@@ -10,7 +10,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
-  "github.com/google/trillian"
+	"github.com/google/trillian"
 	kpb "github.com/google/trillian/crypto/keyspb"
 	spb "github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/storage"
@@ -55,40 +55,40 @@ func (s *cassAdminStorage) Snapshot(ctx context.Context) (storage.ReadOnlyAdminT
 
 func (s *cassAdminStorage) beginInternal(ctx context.Context) (storage.AdminTX, error) {
 	return &cassAdminTX{
-      ks: s.ks,
-  }, nil
+		ks: s.ks,
+	}, nil
 }
 
 type cassAdminTX struct {
-  ks gocassa.KeySpace
+	ks gocassa.KeySpace
 }
 
 func (t *cassAdminTX) Commit() error {
 	glog.Infof("cassAdminTX.Commit: no-op")
-  return nil
+	return nil
 }
 
 func (t *cassAdminTX) Rollback() error {
 	glog.Infof("cassAdminTX.Rollback: no-op")
-  return nil
+	return nil
 }
 
 func (t *cassAdminTX) IsClosed() bool {
-  glog.Infof("cassAdminTX.Commit")
-  return false
+	glog.Infof("cassAdminTX.Commit")
+	return false
 }
 
 func (t *cassAdminTX) Close() error {
 	glog.Infof("cassAdminTX.Close")
-  return errors.New("cassAdminTX.Close: not implemented")
+	return errors.New("cassAdminTX.Close: not implemented")
 }
 
 func cassTreeToTrillianTree(cTree *cassTree) (*trillian.Tree, error) {
 	trTree := &trillian.Tree{
-		TreeId: cTree.TreeID,
-		Deleted: cTree.Deleted,
-		DisplayName: cTree.DisplayName,
-		Description: cTree.Description,
+		TreeId:          cTree.TreeID,
+		Deleted:         cTree.Deleted,
+		DisplayName:     cTree.DisplayName,
+		Description:     cTree.Description,
 		MaxRootDuration: ptypes.DurationProto(time.Duration(cTree.MaxRootDurationMillis * int64(time.Millisecond))),
 	}
 	var err error
@@ -142,7 +142,7 @@ func (t *cassAdminTX) GetTree(ctx context.Context, treeID int64) (*trillian.Tree
 	glog.Infof("Admin.GetTree: treeID=%d", treeID)
 	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
-  }).WithOptions(gocassa.Options{TableName: "trees"})
+	}).WithOptions(gocassa.Options{TableName: "trees"})
 	treeResult := &cassTree{}
 	err := treesTable.Where(gocassa.Eq("tree_id", treeID)).ReadOne(treeResult).Run()
 	if err != nil {
@@ -150,36 +150,6 @@ func (t *cassAdminTX) GetTree(ctx context.Context, treeID int64) (*trillian.Tree
 	}
 	glog.Infof("GetTree: read tree %v", treeResult)
 	return cassTreeToTrillianTree(treeResult)
-}
-
-type cassGroup struct {
-  ID   string `cql:"group_id"`
-	Name string `cql:"group_name"`
-}
-
-type cassTreeGroup struct {
-	TreeID int64 `cql:"tree_id"`
-	GroupID string `cql:"group_id"`
-}
-
-type cassTree struct {
-  TreeID int64 `cql:"tree_id"`
-	CreateTimeMillis int64 `cql:"create_time_millis"`
-	UpdateTimeMillis int64 `cql:"update_time_millis"`
-	DeleteTimeMillis int64 `cql:"delete_time_millis"`
-	Deleted bool `cql:"deleted"`
-	DisplayName string `cql:"display_name"`
-	Description string `cql:"description"`
-	TreeState string `cql:"tree_state"`
-	TreeType string `cql:"tree_type"`
-	HashStrategy string `cql:"hash_strategy"`
-	HashAlgorithm string `cql:"hash_algorithm"`
-	SignatureAlgorithm string `cql:"signature_algorithm"`
-	// TODO(phad): Should be `cql:"max_root_duration_millis"`.  GetTree fails with
-	// ```can not unmarshal duration into *int64``` - possibly down in gocql?
-	MaxRootDurationMillis int64 `cql:"-"`
-	PrivateKey []byte `cql:"private_key"`
-	PublicKey []byte `cql:"public_key"`
 }
 
 func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*trillian.Tree, error) {
@@ -191,7 +161,7 @@ func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*tr
 	result := make([]*trillian.Tree, len(treeIDs))
 	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
-  })
+	})
 	treesTable = treesTable.WithOptions(gocassa.Options{TableName: "trees"})
 	treeResult := cassTree{}
 	for i, tID := range treeIDs {
@@ -211,7 +181,7 @@ func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*tr
 func (t *cassAdminTX) defaultGroupID(ctx context.Context) (string, error) {
 	groupsByNameTable := t.ks.Table("groups_by_name", &cassGroup{}, gocassa.Keys{
 		PartitionKeys: []string{"group_name"},
-  })
+	})
 	groupsByNameTable = groupsByNameTable.WithOptions(gocassa.Options{TableName: "groups_by_name"})
 	groupResult := cassGroup{}
 	if err := groupsByNameTable.Where(gocassa.Eq("group_name", "_default")).ReadOne(&groupResult).Run(); err != nil {
@@ -228,19 +198,19 @@ func (t *cassAdminTX) ListTreeIDs(ctx context.Context, includeDeleted bool) ([]i
 		return nil, err
 	}
 
-  treesByGroupIDTable := t.ks.MultimapTable("trees_by_group_id", "group_id", "tree_id", &cassTreeGroup{})
+	treesByGroupIDTable := t.ks.MultimapTable("trees_by_group_id", "group_id", "tree_id", &cassTreeGroup{})
 	treesByGroupIDTable = treesByGroupIDTable.WithOptions(gocassa.Options{TableName: "trees_by_group_id"})
 	treeGroupsResult := []cassTreeGroup{}
 	if err = treesByGroupIDTable.List(defGroupID, nil, 0, &treeGroupsResult).Run(); err != nil {
-    return nil, err
-  }
+		return nil, err
+	}
 
-  treeIDs := make([]int64, len(treeGroupsResult))
+	treeIDs := make([]int64, len(treeGroupsResult))
 	for i, tg := range treeGroupsResult {
 		treeIDs[i] = tg.TreeID
 	}
 	glog.Infof("read treeIDs %v", treeIDs)
-  return treeIDs, nil
+	return treeIDs, nil
 }
 
 func validateStorageSettings(trilTree *trillian.Tree) error {
@@ -249,21 +219,6 @@ func validateStorageSettings(trilTree *trillian.Tree) error {
 }
 
 func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (*trillian.Tree, error) {
-//  return nil, errors.New("cassAdminTX.CreateTree: not implemented")
-	/*
-	CreateTree(tree:<
-	  tree_state:ACTIVE
-		tree_type:LOG
-		hash_strategy:RFC6962_SHA256
-		hash_algorithm:SHA256
-		signature_algorithm:ECDSA
-		private_key:<
-		  type_url:"type.googleapis.com/keyspb.PrivateKey"
-			value:"\ny0w\002\001\001\004 \350\260A\3519N\017(\256\257\237\317\344NkJ\232ah\031>QU\304Nj$\226\25731\367\240\n\006\010*\206H\316=\003\001\007\241D\003B\000\004\313\t\326\211\303DC\306\347\334e\334\032\220>\266%8T\276\364Z\317q{8\020>\270=\351\201\254\026\261z)\201\272\362*\262\0349P\373\201V\270\247\306)q\347\336\212\025\264\037\351}\254\033\345"
-		>
-		max_root_duration:<seconds:3600 >
-	> )
-	*/
 	glog.Infof("Admin.CreateTree: tree=%v", trilTree)
 
 	if err := storage.ValidateTreeForCreation(ctx, trilTree); err != nil {
@@ -310,27 +265,27 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 	treesByGroupIDTable = treesByGroupIDTable.WithOptions(gocassa.Options{TableName: "trees_by_group_id"})
 	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
-  })
+	})
 	treesTable = treesTable.WithOptions(gocassa.Options{TableName: "trees"})
 
 	if err := treesByGroupIDTable.Set(cassTreeGroup{
 		TreeID:  id,
 		GroupID: defGroupID,
 	}).Add(treesTable.Set(cassTree{
-		TreeID:      id,
-		CreateTimeMillis: nowMillis,
-		UpdateTimeMillis: nowMillis,
-		Deleted: false,
-		DisplayName: newTree.DisplayName,
-		Description: newTree.Description,
-		TreeState: newTree.TreeState.String(),
-		TreeType: newTree.TreeType.String(),
-		HashStrategy: newTree.HashStrategy.String(),
-		HashAlgorithm: newTree.HashAlgorithm.String(),
-		SignatureAlgorithm: newTree.SignatureAlgorithm.String(),
-		MaxRootDurationMillis: int64(rootDuration/time.Millisecond),
-		PrivateKey: privateKey,
-		PublicKey: newTree.PublicKey.GetDer(),
+		TreeID:                id,
+		CreateTimeMillis:      nowMillis,
+		UpdateTimeMillis:      nowMillis,
+		Deleted:               false,
+		DisplayName:           newTree.DisplayName,
+		Description:           newTree.Description,
+		TreeState:             newTree.TreeState.String(),
+		TreeType:              newTree.TreeType.String(),
+		HashStrategy:          newTree.HashStrategy.String(),
+		HashAlgorithm:         newTree.HashAlgorithm.String(),
+		SignatureAlgorithm:    newTree.SignatureAlgorithm.String(),
+		MaxRootDurationMillis: int64(rootDuration / time.Millisecond),
+		PrivateKey:            privateKey,
+		PublicKey:             newTree.PublicKey.GetDer(),
 	})).RunLoggedBatchWithContext(ctx); err != nil {
 		return nil, err
 	}
@@ -339,20 +294,20 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 
 func (t *cassAdminTX) UpdateTree(ctx context.Context, treeID int64, updateFunc func(*trillian.Tree)) (*trillian.Tree, error) {
 	glog.Infof("Admin.UpdateTree: treeID=%d", treeID)
-  return nil, errors.New("cassAdminTX.UpdateTree: not implemented")
+	return nil, errors.New("cassAdminTX.UpdateTree: not implemented")
 }
 
 func (t *cassAdminTX) SoftDeleteTree(ctx context.Context, treeID int64) (*trillian.Tree, error) {
 	glog.Infof("Admin.SoftDeleteTree: treeID=%d", treeID)
-  return nil, errors.New("cassAdminTX.SoftDeleteTree: not implemented")
+	return nil, errors.New("cassAdminTX.SoftDeleteTree: not implemented")
 }
 
 func (t *cassAdminTX) UndeleteTree(ctx context.Context, treeID int64) (*trillian.Tree, error) {
 	glog.Infof("Admin.UndeleteTree: treeID=%d", treeID)
-  return nil, errors.New("cassAdminTX.UndeleteTree: not implemented")
+	return nil, errors.New("cassAdminTX.UndeleteTree: not implemented")
 }
 
 func (t *cassAdminTX) HardDeleteTree(ctx context.Context, treeID int64) error {
 	glog.Infof("Admin.HardDeleteTree: treeID=%d", treeID)
-  return errors.New("cassAdminTX.HardDeleteTree: not implemented")
+	return errors.New("cassAdminTX.HardDeleteTree: not implemented")
 }
