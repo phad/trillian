@@ -49,7 +49,7 @@ func (m *cassLogStorage) CheckDatabaseAccessible(context.Context) error {
 }
 
 type cassLogTX struct {
-	ks gocassa.KeySpace
+  ks gocassa.KeySpace
 }
 
 // readOnlyLogTX implements storage.ReadOnlyLogTX
@@ -91,10 +91,21 @@ func (m *cassLogStorage) beginInternal(ctx context.Context, tree *trillian.Tree)
 	ltx := &logTreeTX{
 		treeTX: ttx,
 		ks:     m.ks,
-		slr:    &trillian.SignedLogRoot{ /*TODO*/ },
 	}
 
-	// TODO: lots of stuff omitted here from postgres storage.
+	ltx.slr, err = ltx.fetchLatestRoot(ctx)
+	if err == storage.ErrTreeNeedsInit {
+		return ltx, err
+	} else if err != nil {
+		ttx.Rollback()
+		return nil, err
+	}
+	if err := ltx.root.UnmarshalBinary(ltx.slr.LogRoot); err != nil {
+		ttx.Rollback()
+		return nil, err
+	}
+
+	ltx.treeTX.writeRevision = int64(ltx.root.Revision) + 1
 	return ltx, nil
 }
 
@@ -105,7 +116,11 @@ func (m *cassLogStorage) AddSequencedLeaves(_ context.Context, tree *trillian.Tr
 
 func (m *cassLogStorage) SnapshotForTree(ctx context.Context, tree *trillian.Tree) (storage.ReadOnlyLogTreeTX, error) {
 	glog.Infof("cassLogStorage.SnapshotForTree: tree=%v", tree)
-	return nil, errors.New("cassLogStorage.SnapshotForTree: not implemented")
+	tx, err := m.beginInternal(ctx, tree)
+	if err != nil && err != storage.ErrTreeNeedsInit {
+		return nil, err
+	}
+	return tx, err
 }
 
 func (m *cassLogStorage) QueueLeaves(_ context.Context, tree *trillian.Tree, leaves []*trillian.LogLeaf, _ time.Time) ([]*trillian.QueuedLogLeaf, error) {
@@ -116,6 +131,7 @@ func (m *cassLogStorage) QueueLeaves(_ context.Context, tree *trillian.Tree, lea
 type logTreeTX struct {
 	treeTX
 	ks  gocassa.KeySpace
+	root types.LogRootV1
 	slr *trillian.SignedLogRoot
 }
 
@@ -160,6 +176,30 @@ func (t *logTreeTX) LatestSignedLogRoot(ctx context.Context) (*trillian.SignedLo
 	return t.slr, nil
 }
 
+// fetchLatestRoot reads the latest SignedLogRoot from the DB and returns it.
+func (t *logTreeTX) fetchLatestRoot(ctx context.Context) (*trillian.SignedLogRoot, error) {
+	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
+		PartitionKeys: []string{"tree_id"},
+  }).WithOptions(gocassa.Options{TableName: "trees"})
+
+	tree := cassTree{}
+	if err := treesTable.Where(gocassa.Eq("tree_id", t.treeID)).ReadOne(&tree).Run(); err != nil {
+	  return nil, err
+	}
+	if len(tree.CurrentSignedLogRootJSON) == 0 {
+		return nil, storage.ErrTreeNeedsInit
+	}
+
+	var logRoot types.LogRootV1
+	json.Unmarshal(tree.CurrentSignedLogRootJSON, &logRoot)
+	newRoot, _ := logRoot.MarshalBinary()
+	return &trillian.SignedLogRoot{
+		KeyHint:          types.SerializeKeyHint(t.treeID),
+		LogRoot:          newRoot,
+		LogRootSignature: tree.RootSignature,
+	}, nil
+}
+
 func (t *logTreeTX) StoreSignedLogRoot(ctx context.Context, root *trillian.SignedLogRoot) error {
 	glog.Infof("cassandra.logTreeTX.StoreSignedLogRoot(): root=%v", root)
 
@@ -176,7 +216,7 @@ func (t *logTreeTX) StoreSignedLogRoot(ctx context.Context, root *trillian.Signe
 
 	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
-	}).WithOptions(gocassa.Options{TableName: "trees"})
+  }).WithOptions(gocassa.Options{TableName: "trees"})
 
 	treeHeadsTable := t.ks.Table("tree_heads", &cassTreeHead{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id", "revision", "timestamp_nanos"},
@@ -186,7 +226,7 @@ func (t *logTreeTX) StoreSignedLogRoot(ctx context.Context, root *trillian.Signe
 		"current_slr_json": data,
 		"root_signature":   root.LogRootSignature,
 	}).Add(treeHeadsTable.Set(cassTreeHead{
-		TreeID:         t.treeID,         // PK
+		TreeID:         t.treeID, // PK
 		Revision:       logRoot.Revision, // PK
 		TimestampNanos: logRoot.TimestampNanos,
 		Size:           logRoot.TreeSize,
