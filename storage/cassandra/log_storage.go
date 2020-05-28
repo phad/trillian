@@ -171,7 +171,7 @@ func (t *logTreeTX) StoreSignedLogRoot(ctx context.Context, root *trillian.Signe
 	if len(logRoot.Metadata) != 0 {
 		return fmt.Errorf("unimplemented: cassandra storage does not support LogRoot.metadata")
 	}
-	//get a json copy of the tree_head
+	// Serialize the SignedLogRoot within the trees record as a JSON blob.
 	data, _ := json.Marshal(logRoot)
 
 	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
@@ -179,12 +179,12 @@ func (t *logTreeTX) StoreSignedLogRoot(ctx context.Context, root *trillian.Signe
 	}).WithOptions(gocassa.Options{TableName: "trees"})
 
 	treeHeadsTable := t.ks.Table("tree_heads", &cassTreeHead{}, gocassa.Keys{
-		PartitionKeys: []string{"tree_id", "tree_revision"},
+		PartitionKeys: []string{"tree_id", "revision", "timestamp_nanos"},
 	}).WithOptions(gocassa.Options{TableName: "tree_heads"})
 
 	if err := treesTable.Where(gocassa.Eq("tree_id", t.treeID)).Update(map[string]interface{}{
-		"current_tree_data": data,
-		"root_signature":    root.LogRootSignature,
+		"current_slr_json": data,
+		"root_signature":   root.LogRootSignature,
 	}).Add(treeHeadsTable.Set(cassTreeHead{
 		TreeID:         t.treeID,         // PK
 		Revision:       logRoot.Revision, // PK

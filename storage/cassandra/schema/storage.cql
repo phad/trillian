@@ -19,7 +19,7 @@ CREATE TABLE test.trees(
   public_key               blob,
   deleted                  boolean,
   delete_time_millis       bigint,
-  current_tree_data	       map<text, text>,
+  current_slr_json	       blob,
   root_signature	         blob,
   PRIMARY KEY(tree_id)
 );
