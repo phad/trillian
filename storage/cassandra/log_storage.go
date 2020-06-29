@@ -303,15 +303,18 @@ func (t *logTreeTX) QueueLeaves(ctx context.Context, leaves []*trillian.LogLeaf,
 		}
 		args = append(args, queueArgs(t.treeID, leaf.LeafIdentityHash, queueTimestamp)...)
 
-		// TODO(phad): insert unsequenced entry into C* here.
+		unseqLeafDataTable := t.ks.Table("unsequenced_leaf_data", &cassUnsequencedLeafData{}, gocassa.Keys{
+			PartitionKeys: []string{"tree_id", "bucket", "queue_timestamp_nanos", "leaf_identity_hash"},
+		}).WithOptions(gocassa.Options{TableName: "unsequenced_leaf_data"})
+		err = unseqLeafDataTable.Set(cassUnsequencedLeafData{
+			TreeID:              t.treeID,
+			Bucket:              0, // TODO(phad): decide if we need bucketing or not.
+			LeafIdentityHash:    leaf.LeafIdentityHash,
+			QueueTimestampNanos: uint64(queueTimestamp.UnixNano()),
+		}).RunWithContext(ctx)
 
-		// _, err = t.tx.ExecContext(
-		// 	ctx,
-		// 	insertUnsequencedEntrySQL,
-		// 	args...,
-		// )
 		if err != nil {
-			glog.Warningf("Error inserting into Unsequenced: %s", err)
+			glog.Warningf("Error inserting into unsequenced_leaf_data: %s", err)
 			return nil, err
 		}
 		leafDuration := time.Since(leafStart)

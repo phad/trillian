@@ -61,6 +61,14 @@ CREATE TABLE test.leaf_data(
   PRIMARY KEY ((tree_id, leaf_identity_hash))
 );
 
+CREATE TABLE test.unsequenced_leaf_data(
+  tree_id               bigint,
+  bucket                int,
+  leaf_identity_hash    blob,
+  queue_timestamp_nanos bigint,
+  PRIMARY KEY ((tree_id, bucket, queue_timestamp_nanos), leaf_identity_hash)
+) WITH CLUSTERING ORDER BY (leaf_identity_hash ASC);
+
 CREATE TABLE test.sequenced_leaf_counts(
   tree_id                 bigint,
   num_sequenced_leaf_data counter,

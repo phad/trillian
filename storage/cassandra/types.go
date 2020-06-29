@@ -55,3 +55,10 @@ type cassSequencedLeafCounts struct {
 	TreeID               int64           `cql:"tree_id"`
 	NumSequencedLeafData gocassa.Counter `cql:"num_sequenced_leaf_data"`
 }
+
+type cassUnsequencedLeafData struct {
+	TreeID              int64  `cql:"tree_id"`
+	Bucket              int    `cql:"bucket"`
+	LeafIdentityHash    []byte `cql:"leaf_identity_hash"`
+	QueueTimestampNanos uint64 `cql:"queue_timestamp_nanos"`
+}
