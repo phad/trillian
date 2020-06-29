@@ -321,7 +321,19 @@ func (t *logTreeTX) AddSequencedLeaves(ctx context.Context, leaves []*trillian.L
 }
 
 func (t *logTreeTX) GetSequencedLeafCount(ctx context.Context) (int64, error) {
-	return 0, errors.New("cassLogStorage.logTreeTX.GetSequencedLeafCount: not implemented")
+	t.treeTX.mu.Lock()
+	defer t.treeTX.mu.Unlock()
+
+	seqLeafCountsTable := t.ks.Table("sequenced_leaf_counts", &cassSequencedLeafCounts{}, gocassa.Keys{
+		PartitionKeys: []string{"tree_id"},
+	}).WithOptions(gocassa.Options{TableName: "sequenced_leaf_counts"})
+	seqLeafCountsResult := &cassSequencedLeafCounts{}
+	err := seqLeafCountsTable.Where(gocassa.Eq("tree_id", t.treeID)).ReadOne(seqLeafCountsResult).Run()
+	if err != nil && !isRowNotFoundError(err) {
+		glog.Warningf("Error %T %v getting sequenced leaf count for tree ID=%d: %s", err, err, t.treeID, err)
+	}
+	glog.Infof("Sequenced leaf count for tree ID=%d: %d", t.treeID, seqLeafCountsResult.NumSequencedLeafData)
+	return int64(seqLeafCountsResult.NumSequencedLeafData), err
 }
 
 func (t *logTreeTX) GetLeavesByIndex(ctx context.Context, leaves []int64) ([]*trillian.LogLeaf, error) {
@@ -434,6 +446,15 @@ func (l byLeafIdentityHashWithPosition) Swap(i, j int) {
 }
 func (l byLeafIdentityHashWithPosition) Less(i, j int) bool {
 	return bytes.Compare(l[i].leaf.LeafIdentityHash, l[j].leaf.LeafIdentityHash) == -1
+}
+
+func isRowNotFoundError(err error) bool {
+	switch err.(type) {
+	case gocassa.RowNotFoundError:
+			return true
+	default:
+		  return false
+	}
 }
 
 func isDuplicateErr(err error) bool {

@@ -21,7 +21,7 @@ CREATE TABLE test.trees(
   delete_time_millis       bigint,
   current_slr_json	       blob,
   root_signature	         blob,
-  PRIMARY KEY(tree_id)
+  PRIMARY KEY (tree_id)
 );
 
 CREATE TABLE test.groups(
@@ -58,5 +58,11 @@ CREATE TABLE test.leaf_data(
   leaf_value            blob,
   extra_data            blob,
   queue_timestamp_nanos bigint,
-  PRIMARY KEY((tree_id, leaf_identity_hash))
+  PRIMARY KEY ((tree_id, leaf_identity_hash))
+);
+
+CREATE TABLE test.sequenced_leaf_counts(
+  tree_id                 bigint,
+  num_sequenced_leaf_data counter,
+  PRIMARY KEY (tree_id)
 );

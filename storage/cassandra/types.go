@@ -1,5 +1,7 @@
 package cassandra
 
+import "github.com/monzo/gocassa"
+
 type cassGroup struct {
 	ID   string `cql:"group_id"`
 	Name string `cql:"group_name"`
@@ -47,4 +49,9 @@ type cassLeafData struct {
 	LeafValue           []byte `cql:"leaf_value"`
 	ExtraData           []byte `cql:"extra_data"`
 	QueueTimestampNanos uint64 `cql:"queue_timestamp_nanos"`
+}
+
+type cassSequencedLeafCounts struct {
+	TreeID               int64           `cql:"tree_id"`
+	NumSequencedLeafData gocassa.Counter `cql:"num_sequenced_leaf_data"`
 }
