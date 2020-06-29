@@ -148,7 +148,7 @@ func (t *cassAdminTX) GetTree(ctx context.Context, treeID int64) (*trillian.Tree
 	if err != nil {
 		return nil, err
 	}
-	glog.Infof("GetTree: read tree %v", treeResult)
+	glog.Infof("GetTree: read tree %q [%s] ID=%d", treeResult.DisplayName, treeResult.Description, treeID)
 	return cassTreeToTrillianTree(treeResult)
 }
 

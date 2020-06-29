@@ -115,12 +115,12 @@ func (m *cassLogStorage) beginInternal(ctx context.Context, tree *trillian.Tree)
 }
 
 func (m *cassLogStorage) AddSequencedLeaves(_ context.Context, tree *trillian.Tree, leaves []*trillian.LogLeaf, _ time.Time) ([]*trillian.QueuedLogLeaf, error) {
-	glog.Infof("cassLogStorage.AddSequencedLeaves: %d leaves for tree=%v", len(leaves), tree)
+	glog.Infof("cassLogStorage.AddSequencedLeaves: %d leaves for tree %q[%s]ID=%d", len(leaves), tree.DisplayName, tree.Description, tree.TreeId)
 	return nil, errors.New("cassLogStorage.AddSequencedLeaves: not implemented")
 }
 
 func (m *cassLogStorage) SnapshotForTree(ctx context.Context, tree *trillian.Tree) (storage.ReadOnlyLogTreeTX, error) {
-	glog.Infof("cassLogStorage.SnapshotForTree: tree=%v", tree)
+	glog.Infof("cassLogStorage.SnapshotForTree: tree %q[%s]ID=%d", tree.DisplayName, tree.Description, tree.TreeId)
 	tx, err := m.beginInternal(ctx, tree)
 	if err != nil && err != storage.ErrTreeNeedsInit {
 		return nil, err
@@ -129,7 +129,7 @@ func (m *cassLogStorage) SnapshotForTree(ctx context.Context, tree *trillian.Tre
 }
 
 func (m *cassLogStorage) QueueLeaves(ctx context.Context, tree *trillian.Tree, leaves []*trillian.LogLeaf, queueTimestamp time.Time) ([]*trillian.QueuedLogLeaf, error) {
-	glog.Infof("cassLogStorage.QueueLeaves: %d leaves for tree %v", len(leaves), tree)
+	glog.Infof("cassLogStorage.QueueLeaves: %d leaves for tree %q[%s]ID=%d", len(leaves), tree.DisplayName, tree.Description, tree.TreeId)
 	tx, err := m.beginInternal(ctx, tree)
 	if tx != nil {
 		// Ensure we don't leak the transaction if an error occurs below.
