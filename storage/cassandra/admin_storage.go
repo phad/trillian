@@ -168,7 +168,7 @@ func (t *cassAdminTX) ListTrees(ctx context.Context, includeDeleted bool) ([]*tr
 		if err := treesTable.Where(gocassa.Eq("tree_id", tID)).ReadOne(&treeResult).Run(); err != nil {
 			return nil, err
 		}
-		glog.Infof("read tree %v", treeResult)
+		glog.V(1).Infof("read tree ID=%v", tID)
 		trilTree, err := cassTreeToTrillianTree(&treeResult)
 		if err != nil {
 			return nil, err

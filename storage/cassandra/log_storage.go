@@ -64,7 +64,48 @@ type readOnlyLogTX struct {
 
 func (m *cassLogStorage) Snapshot(context.Context) (storage.ReadOnlyLogTX, error) {
 	glog.Infof("cassLogStorage.Snapshot")
-	return nil, errors.New("cassLogStorage.Snapshot: not implemented")
+	return &readOnlyLogTX{ls: m}, nil
+}
+
+func (t *readOnlyLogTX) Commit(context.Context) error {
+	glog.Infof("cassReadOnlyLogTX.Commit: no-op")
+	return nil
+}
+
+func (t *readOnlyLogTX) Rollback() error {
+	return errors.New("cassLogStorage.readOnlyLogTx.Rollback: not implemented")
+}
+
+func (t *readOnlyLogTX) Close() error {
+	return errors.New("cassLogStorage.readOnlyLogTx.Close: not implemented")
+}
+
+func (t *readOnlyLogTX) GetActiveLogIDs(ctx context.Context) ([]int64, error) {
+//	return nil, errors.New("cassLogStorage.readOnlyLogTx.GetActiveLogIDs: not implemented")
+	aTx, err := t.ls.admin.Snapshot(ctx)
+	if err != nil {
+		glog.Errorf("cass.readOnlyLogTX.GetActiveLogIDs: err=%v", err)
+	}
+	trees, err :=	aTx.ListTrees(ctx, /*includeDeleted*/true)
+	if err != nil {
+		glog.Errorf("cass.readOnlyAdminTX.ListTrees: err=%v", err)
+	}
+	// TODO(phad): do we need a treesByDeletedAndState table?
+	// then we'd iterate with deleted=false
+	ids := []int64{}
+	for _, tr := range trees {
+		if tr.TreeType != trillian.TreeType_LOG {
+			continue
+		}
+		if tr.Deleted {
+			continue
+		}
+		if tr.TreeState != trillian.TreeState_ACTIVE && tr.TreeState != trillian.TreeState_DRAINING {
+			continue
+		}
+		ids = append(ids, tr.TreeId)
+	}
+	return ids, nil
 }
 
 func (m *cassLogStorage) ReadWriteTransaction(ctx context.Context, tree *trillian.Tree, f storage.LogTXFunc) error {
@@ -176,8 +217,9 @@ func (t *logTreeTX) WriteRevision(ctx context.Context) (int64, error) {
 	return 0, errors.New("cassLogStorage.logTreeTX.WriteRevision: not implemented")
 }
 
+// TODO(phad): DequeueLeaves is next up.
 func (t *logTreeTX) DequeueLeaves(ctx context.Context, limit int, cutoffTime time.Time) ([]*trillian.LogLeaf, error) {
-	return nil, errors.New("cassLogStorage.logTreeTX.DequeueLeaves: not implemented")
+	return nil, errors.New("cassLogStorage.logTreeTX.DequeueLeaves: NEXT UP TODO: not implemented")
 }
 
 // sortLeavesForInsert returns a slice containing the passed in leaves sorted
@@ -331,9 +373,10 @@ func (t *logTreeTX) GetSequencedLeafCount(ctx context.Context) (int64, error) {
 	err := seqLeafCountsTable.Where(gocassa.Eq("tree_id", t.treeID)).ReadOne(seqLeafCountsResult).Run()
 	if err != nil && !isRowNotFoundError(err) {
 		glog.Warningf("Error %T %v getting sequenced leaf count for tree ID=%d: %s", err, err, t.treeID, err)
+		return 0, err
 	}
 	glog.Infof("Sequenced leaf count for tree ID=%d: %d", t.treeID, seqLeafCountsResult.NumSequencedLeafData)
-	return int64(seqLeafCountsResult.NumSequencedLeafData), err
+	return int64(seqLeafCountsResult.NumSequencedLeafData), nil
 }
 
 func (t *logTreeTX) GetLeavesByIndex(ctx context.Context, leaves []int64) ([]*trillian.LogLeaf, error) {
