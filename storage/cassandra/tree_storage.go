@@ -14,10 +14,11 @@ import (
 type cassTreeStorage struct {
 }
 
-func (c *cassTreeStorage) beginTreeTx(_ context.Context, tree *trillian.Tree, _ /*hashSizeBytes*/ int, _ *cache.SubtreeCache) (treeTX, error) {
+func (c *cassTreeStorage) beginTreeTx(_ context.Context, tree *trillian.Tree, hashSizeBytes int, _ *cache.SubtreeCache) (treeTX, error) {
 	return treeTX{
 		mu:     &sync.Mutex{},
 		treeID: tree.TreeId,
+		hashSizeBytes: hashSizeBytes,
 	}, nil
 }
 

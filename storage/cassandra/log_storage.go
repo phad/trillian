@@ -79,7 +79,7 @@ func (m *cassLogStorage) ReadWriteTransaction(ctx context.Context, tree *trillia
 	return tx.Commit(ctx)
 }
 
-func (m *cassLogStorage) beginInternal(ctx context.Context, tree *trillian.Tree) (storage.LogTreeTX, error) {
+func (m *cassLogStorage) beginInternal(ctx context.Context, tree *trillian.Tree) (*logTreeTX, error) {
 	hasher, err := hashers.NewLogHasher(tree.HashStrategy)
 	if err != nil {
 		return nil, err
@@ -224,7 +224,17 @@ func (t *logTreeTX) QueueLeaves(ctx context.Context, leaves []*trillian.LogLeaf,
 		if err != nil {
 			return nil, fmt.Errorf("got invalid queue timestamp: %v", err)
 		}
-		_ = qTimestamp
+
+		leafDataTable := t.ks.MultimapTable("leaf_data", "tree_id", "leaf_identity_hash", &cassLeafData{})
+		leafDataTable = leafDataTable.WithOptions(gocassa.Options{TableName: "leaf_data"})
+		err = leafDataTable.Set(cassLeafData{
+			TreeID: t.treeID,
+			LeafIdentityHash: leaf.LeafIdentityHash,
+			LeafValue: leaf.LeafValue,
+			ExtraData: leaf.ExtraData,
+			QueueTimestampNanos: uint64(qTimestamp.UnixNano()),
+		}).RunWithContext(ctx)
+
 		//		_, err = t.tx.ExecContext(ctx, insertLeafDataSQL, t.treeID, leaf.LeafIdentityHash, leaf.LeafValue, leaf.ExtraData, qTimestamp.UnixNano())
 		insertDuration := time.Since(leafStart)
 		_ = insertDuration
@@ -250,6 +260,9 @@ func (t *logTreeTX) QueueLeaves(ctx context.Context, leaves []*trillian.LogLeaf,
 			return nil, fmt.Errorf("got invalid queue timestamp: %v", err)
 		}
 		args = append(args, queueArgs(t.treeID, leaf.LeafIdentityHash, queueTimestamp)...)
+
+		// TODO(phad): insert unsequenced entry into C* here.
+
 		// _, err = t.tx.ExecContext(
 		// 	ctx,
 		// 	insertUnsequencedEntrySQL,

@@ -42,7 +42,7 @@ CREATE TABLE test.trees_by_group_id(
   PRIMARY KEY ((group_id), tree_id)
 ) WITH CLUSTERING ORDER BY (tree_id ASC);
 
-CREATE TABLE test.tree_heads (
+CREATE TABLE test.tree_heads(
     tree_id         bigint,
     revision        bigint,
     timestamp_nanos bigint,
@@ -51,3 +51,12 @@ CREATE TABLE test.tree_heads (
     root_signature  blob,
     PRIMARY KEY ((tree_id, revision), timestamp_nanos)
 ) WITH CLUSTERING ORDER BY (timestamp_nanos DESC);
+
+CREATE TABLE test.leaf_data(
+  tree_id               bigint,
+  leaf_identity_hash    blob,
+  leaf_value            blob,
+  extra_data            blob,
+  queue_timestamp_nanos bigint,
+  PRIMARY KEY((tree_id, leaf_identity_hash))
+);

@@ -40,3 +40,11 @@ type cassTreeHead struct {
 	RootHash       []byte `cql:"root_hash"`
 	RootSignature  []byte `cql:"root_signature"`
 }
+
+type cassLeafData struct {
+	TreeID              int64  `cql:"tree_id"`
+	LeafIdentityHash    []byte `cql:"leaf_identity_hash"`
+	LeafValue           []byte `cql:"leaf_value"`
+	ExtraData           []byte `cql:"extra_data"`
+	QueueTimestampNanos uint64 `cql:"queue_timestamp_nanos"`
+}
