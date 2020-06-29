@@ -265,8 +265,7 @@ func (t *cassAdminTX) CreateTree(ctx context.Context, trilTree *trillian.Tree) (
 	treesByGroupIDTable = treesByGroupIDTable.WithOptions(gocassa.Options{TableName: "trees_by_group_id"})
 	treesTable := t.ks.Table("trees", &cassTree{}, gocassa.Keys{
 		PartitionKeys: []string{"tree_id"},
-	})
-	treesTable = treesTable.WithOptions(gocassa.Options{TableName: "trees"})
+	}).WithOptions(gocassa.Options{TableName: "trees"})
 
 	if err := treesByGroupIDTable.Set(cassTreeGroup{
 		TreeID:  id,

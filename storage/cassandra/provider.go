@@ -7,7 +7,6 @@ import (
 	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/storage"
 
-	// TODO(phad): Load cassandra driver
 	"github.com/monzo/gocassa"
 )
 
@@ -47,7 +46,6 @@ func newCassProvider(mf monitoring.MetricFactory) (storage.Provider, error) {
 
 func (s *cassProvider) LogStorage() storage.LogStorage {
 	glog.Warningf("Support for the Cassandra log is experimental.  Please use at your own risk!!!")
-	// TODO(phad): return NewLogStorage(...)
 	return NewLogStorage(s.ks, s.mf)
 }
 
