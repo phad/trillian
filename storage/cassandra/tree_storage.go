@@ -16,8 +16,8 @@ type cassTreeStorage struct {
 
 func (c *cassTreeStorage) beginTreeTx(_ context.Context, tree *trillian.Tree, hashSizeBytes int, _ *cache.SubtreeCache) (treeTX, error) {
 	return treeTX{
-		mu:     &sync.Mutex{},
-		treeID: tree.TreeId,
+		mu:            &sync.Mutex{},
+		treeID:        tree.TreeId,
 		hashSizeBytes: hashSizeBytes,
 	}, nil
 }

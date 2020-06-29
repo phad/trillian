@@ -228,10 +228,10 @@ func (t *logTreeTX) QueueLeaves(ctx context.Context, leaves []*trillian.LogLeaf,
 		leafDataTable := t.ks.MultimapTable("leaf_data", "tree_id", "leaf_identity_hash", &cassLeafData{})
 		leafDataTable = leafDataTable.WithOptions(gocassa.Options{TableName: "leaf_data"})
 		err = leafDataTable.Set(cassLeafData{
-			TreeID: t.treeID,
-			LeafIdentityHash: leaf.LeafIdentityHash,
-			LeafValue: leaf.LeafValue,
-			ExtraData: leaf.ExtraData,
+			TreeID:              t.treeID,
+			LeafIdentityHash:    leaf.LeafIdentityHash,
+			LeafValue:           leaf.LeafValue,
+			ExtraData:           leaf.ExtraData,
 			QueueTimestampNanos: uint64(qTimestamp.UnixNano()),
 		}).RunWithContext(ctx)
 
